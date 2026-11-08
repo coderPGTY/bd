@@ -1,0 +1,96 @@
+CREATE DATABASE avito_analog_db;
+USE avito_analog_db;
+
+-- 1. ТАБЛИЦА: Категории и подкатегории (Связь сама на себя)
+CREATE TABLE Categories (
+    id_category INT AUTO_INCREMENT PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    id_parent_category INT DEFAULT NULL, -- Если NULL, то это главная категория. Если число - это подкатегория.
+    FOREIGN KEY (id_parent_category) REFERENCES Categories(id_category) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. ТАБЛИЦА: Пользователи (Добавлено поле password)
+CREATE TABLE Users (
+    id_user INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL, -- Поле для хэша пароля
+    city VARCHAR(50) NOT NULL,
+    registration_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    rating DECIMAL(3,2) DEFAULT 0.00,
+    CONSTRAINT chk_rating CHECK (rating >= 0.00 AND rating <= 5.00)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 3. ТАБЛИЦА: Объявления (Статус изменен на INT)
+CREATE TABLE Advertisements (
+    id_advertisement INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    description TEXT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    publication_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status INT NOT NULL DEFAULT 1, -- 1 = Активно, 2 = Продано, 3 = Заблокировано
+    id_user INT NOT NULL,
+    id_category INT NOT NULL,
+    CONSTRAINT chk_price CHECK (price >= 0),
+    FOREIGN KEY (id_user) REFERENCES Users(id_user) ON DELETE CASCADE,
+    FOREIGN KEY (id_category) REFERENCES Categories(id_category) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 4. ТАБЛИЦА: Фотографии объявлений
+CREATE TABLE Photos (
+    id_photo INT AUTO_INCREMENT PRIMARY KEY,
+    id_advertisement INT NOT NULL,
+    photo_path VARCHAR(255) NOT NULL,
+    FOREIGN KEY (id_advertisement) REFERENCES Advertisements(id_advertisement) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. ТАБЛИЦА: Чат / Сообщения (Для реализации через WebSockets)
+CREATE TABLE Messages (
+    id_message INT AUTO_INCREMENT PRIMARY KEY,
+    id_sender INT NOT NULL,
+    id_receiver INT NOT NULL,
+    id_advertisement INT NOT NULL,
+    message_text TEXT NOT NULL,
+    sent_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_sender) REFERENCES Users(id_user) ON DELETE CASCADE,
+    FOREIGN KEY (id_receiver) REFERENCES Users(id_user) ON DELETE CASCADE,
+    FOREIGN KEY (id_advertisement) REFERENCES Advertisements(id_advertisement) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 6. ТАБЛИЦА: Избранное
+CREATE TABLE Favorites (
+    id_favorite INT AUTO_INCREMENT PRIMARY KEY,
+    id_user INT NOT NULL,
+    id_advertisement INT NOT NULL,
+    added_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_adv (id_user, id_advertisement),
+    FOREIGN KEY (id_user) REFERENCES Users(id_user) ON DELETE CASCADE,
+    FOREIGN KEY (id_advertisement) REFERENCES Advertisements(id_advertisement) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. ТАБЛИЦА: Отзывы (Перепривязана на Объявление вместо Селлера)
+CREATE TABLE Reviews (
+    id_review INT AUTO_INCREMENT PRIMARY KEY,
+    id_author INT NOT NULL, -- Кто оставляет отзыв
+    id_advertisement INT NOT NULL, -- Отзыв привязан строго к объявлению (сделке)
+    score INT NOT NULL,
+    review_text TEXT,
+    created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_score CHECK (score >= 1 AND score <= 5),
+    FOREIGN KEY (id_author) REFERENCES Users(id_user) ON DELETE CASCADE,
+    FOREIGN KEY (id_advertisement) REFERENCES Advertisements(id_advertisement) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 8. ТАБЛИЦА: Сделки / Доставка (Убрано поле delivery_cost)
+CREATE TABLE Transactions (
+    id_transaction INT AUTO_INCREMENT PRIMARY KEY,
+    id_advertisement INT NOT NULL UNIQUE, 
+    id_buyer INT NOT NULL,
+    delivery_status ENUM('Оформлено', 'В пути', 'Доставлено', 'Отменено') DEFAULT 'Оформлено',
+    payment_method VARCHAR(50) NOT NULL,
+    transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_advertisement) REFERENCES Advertisements(id_advertisement) ON DELETE CASCADE,
+    FOREIGN KEY (id_buyer) REFERENCES Users(id_user) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
