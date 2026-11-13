@@ -1,0 +1,135 @@
+USE avito_analog_db;
+
+-- Запрос 1: Карточка объявления.
+-- Возвращает полную информацию об активных объявлениях: название, описание, цену, дату публикации,
+-- данные продавца (имя, рейтинг, телефон), название категории и путь к главной фотографии.
+-- Используется для отображения списка объявлений на главной странице приложения.
+SELECT 
+    a.id_advertisement,
+    a.title,
+    a.description,
+    a.price,
+    a.publication_date,
+    u.username AS seller_name,
+    u.rating AS seller_rating,
+    u.phone AS seller_phone,
+    c.category_name,
+    p.photo_path AS main_photo
+FROM Advertisements a
+JOIN Users u ON a.id_user = u.id_user
+JOIN Categories c ON a.id_category = c.id_category
+LEFT JOIN Photos p ON a.id_advertisement = p.id_advertisement
+WHERE a.status = 1
+ORDER BY a.publication_date DESC;
+
+-- Запрос 2: Поиск объявлений с фильтрацией.
+-- Ищет объявления по ключевому слову в названии (LIKE '%iPhone%'),
+-- фильтрует по городу продавца и диапазону цен.
+-- Результаты сортируются по возрастанию цены.
+-- Используется для страницы поиска с фильтрами.
+SELECT 
+    a.id_advertisement,
+    a.title,
+    a.price,
+    u.username AS seller,
+    u.city,
+    c.category_name
+FROM Advertisements a
+JOIN Users u ON a.id_user = u.id_user
+JOIN Categories c ON a.id_category = c.id_category
+WHERE a.status = 1
+  AND a.title LIKE '%iPhone%'
+  AND u.city = 'Москва'
+  AND a.price BETWEEN 10000 AND 100000
+ORDER BY a.price ASC;
+
+-- Запрос 3: Аналитический отчёт "Топ-5 продавцов по рейтингу".
+-- Выводит 5 пользователей с наивысшим рейтингом, у которых есть хотя бы один отзыв.
+-- Показывает количество объявлений и отзывов каждого продавца.
+-- Используется для раздела "Лучшие продавцы" в приложении.
+SELECT 
+    u.id_user,
+    u.username,
+    u.city,
+    ROUND(u.rating, 2) AS rating,
+    COUNT(DISTINCT a.id_advertisement) AS total_ads,
+    COUNT(DISTINCT r.id_review) AS total_reviews
+FROM Users u
+LEFT JOIN Advertisements a ON u.id_user = a.id_user
+LEFT JOIN Reviews r ON a.id_advertisement = r.id_advertisement
+GROUP BY u.id_user, u.username, u.city, u.rating
+HAVING total_reviews > 0
+ORDER BY rating DESC
+LIMIT 5;
+
+-- Запрос 4: Статистика по категориям.
+-- Для каждой категории показывает количество активных объявлений,
+-- среднюю, минимальную и максимальную цену.
+-- Используется для аналитического отчёта "Обзор рынка по категориям".
+SELECT 
+    c.category_name,
+    COUNT(a.id_advertisement) AS ads_count,
+    ROUND(AVG(a.price), 2) AS avg_price,
+    MIN(a.price) AS min_price,
+    MAX(a.price) AS max_price
+FROM Categories c
+LEFT JOIN Advertisements a ON c.id_category = a.id_category AND a.status = 1
+GROUP BY c.id_category, c.category_name
+ORDER BY ads_count DESC;
+
+-- Запрос 5: История сообщений пользователя (чат).
+-- Выводит все сообщения, где пользователь с ID=1 является отправителем или получателем.
+-- Показывает дату, имя отправителя (или "Вы", если это сам пользователь), текст сообщения
+-- и название объявления, к которому привязан диалог.
+-- Используется для окна чата в личном кабинете.
+SELECT 
+    m.sent_date,
+    CASE 
+        WHEN m.id_sender = 1 THEN 'Вы' 
+        ELSE u.username 
+    END AS sender,
+    m.message_text,
+    a.title AS advertisement_title
+FROM Messages m
+JOIN Users u ON m.id_sender = u.id_user
+JOIN Advertisements a ON m.id_advertisement = a.id_advertisement
+WHERE m.id_sender = 1 OR m.id_receiver = 1
+ORDER BY m.sent_date DESC;
+
+-- Запрос 6: Избранные объявления пользователя.
+-- Возвращает список объявлений, добавленных пользователем с ID=2 в избранное.
+-- Показывает название, цену, путь к фото, имя продавца и дату добавления в избранное.
+-- Используется для страницы "Избранное" в личном кабинете.
+SELECT 
+    a.id_advertisement,
+    a.title,
+    a.price,
+    p.photo_path,
+    u.username AS seller,
+    f.added_date
+FROM Favorites f
+JOIN Advertisements a ON f.id_advertisement = a.id_advertisement
+JOIN Users u ON a.id_user = u.id_user
+LEFT JOIN Photos p ON a.id_advertisement = p.id_advertisement
+WHERE f.id_user = 2
+ORDER BY f.added_date DESC;
+
+-- Запрос 7: Отчёт по сделкам с вычисляемым полем.
+-- Выводит информацию о всех совершённых сделках: название объявления, цену,
+-- способ оплаты, статус доставки, дату сделки и имя покупателя.
+-- Поле total_amount — вычисляемое (в данном случае равно цене, но может быть расширено,
+-- например, умножением на количество товара).
+-- Используется для раздела "История покупок" или административного отчёта.
+SELECT 
+    t.id_transaction,
+    a.title,
+    a.price AS deal_price,
+    t.payment_method,
+    t.delivery_status,
+    t.transaction_date,
+    u.username AS buyer,
+    a.price * 1.0 AS total_amount
+FROM Transactions t
+JOIN Advertisements a ON t.id_advertisement = a.id_advertisement
+JOIN Users u ON t.id_buyer = u.id_user
+ORDER BY t.transaction_date DESC;
